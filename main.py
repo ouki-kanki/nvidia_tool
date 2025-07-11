@@ -3,10 +3,12 @@ from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout
 from PyQt6.QtGui import QIcon, QFont
 from PyQt6.QtCore import QTimer
 from gpu_info import NvidiaGPU
+from power_setter import PowerSetter
 
-
-gpu = NvidiaGPU()
 app = QApplication(sys.argv)
+gpu = NvidiaGPU()
+power_widget = PowerSetter()
+
 
 def update_label(label, getter, suffix=""):
     """
@@ -26,7 +28,8 @@ window.setWindowTitle('nvidia tool')
 window.setGeometry(0, 0, 600, 200)
 window.setWindowIcon(QIcon("nvidia.png"))
 
-layout = QVBoxLayout()
+mainLayout = QVBoxLayout()
+label_layout = QVBoxLayout()
 
 name_label = QLabel(f"{gpu.get_name()}")
 fun_percent_label = QLabel(f"{gpu.get_fan_speed_percent()}%")
@@ -44,8 +47,16 @@ labels_list = [
 
 for label in labels_list:
     label.setFont(QFont("Arial", 12))
-    layout.addWidget(label)
+    label_layout.addWidget(label)
 
+labelWidget = QWidget()
+labelWidget.setLayout(label_layout)
+
+# udpate the current power limit label from the value inside the power_setter module
+def update_power_limit_label(value):
+    current_power_limit_label.setText(f"current power limit: {value} watt")
+
+power_widget.powerLimitSet.connect(update_power_limit_label)
 
 def refresh_all():
     update_label(temp_label, gpu.get_temp, "°C")
@@ -57,7 +68,10 @@ timer = QTimer()
 timer.timeout.connect(refresh_all)
 timer.start(1000)
 
-window.setLayout(layout)
+mainLayout.addWidget(labelWidget)
+mainLayout.addWidget(power_widget)
+
+window.setLayout(mainLayout)
 window.show()
 window.move(0, 0)
 
