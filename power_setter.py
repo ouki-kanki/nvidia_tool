@@ -1,7 +1,8 @@
+import re
+import subprocess
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSlider, QPushButton
 from PyQt6.QtCore import Qt
-import subprocess
 
 
 class PowerSetter(QWidget):
@@ -17,10 +18,23 @@ class PowerSetter(QWidget):
 
         row_layout = QHBoxLayout()
 
+        button = QPushButton("yo")
+        button.setCheckable(True)
+        row_layout.addWidget(button)
 
         self.slider = QSlider(Qt.Orientation.Horizontal)
         self.slider.setMinimum(100)
-        self.slider.setMaximum(380)
+
+        max_limit = self.get_max_power_limit()
+
+        if max_limit:
+            self.slider.setMaximum(max_limit - 30)
+        else:
+            self.slider.setMaximum(380)
+            self.slider.setEnabled(False)
+            self.label.setText("set power is disabled, max limit could not be found")
+            self.label.setStyleSheet("color: tomato;")
+
         self.slider.setValue(250)
         self.slider.setTickPosition(QSlider.TickPosition.TicksAbove)
         self.slider.setStyleSheet("""
@@ -60,11 +74,24 @@ class PowerSetter(QWidget):
     def update_label(self):
         self.label.setText(f"power limit: {self.slider.value()} w")
 
+    def get_max_power_limit(self):
+        try:
+            result = subprocess.run(
+                ["nvidia-smi", "-q", "-d", "POWER"],
+                capture_output=True, text=True, check=True
+            )
+            match = re.search(r"Max Power Limit\s*:\s*([\d.]+) W", result.stdout)
+            if match:
+                return int(float(match.group(1)))
+            return None
+        except subprocess.CalledProcessError:
+            return None
+
     def set_power_limit(self):
         value = self.slider.value()
         try:
             subprocess.run(
-                ["sudo", "nvidia-smi", "-pl", str(value)],
+                ["pkexec", "nvidia-smi", "-pl", str(value)],
                 check=True
             )
             self.label.setText(f"Power limit set to: {value} w")

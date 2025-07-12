@@ -1,6 +1,7 @@
 import subprocess
 import re
 
+
 class NvidiaGPU:
     def __init__(self, index=0):
         self.index = index
