@@ -1,11 +1,15 @@
 import sys, os
 from PyQt6.QtWidgets import (
-    QApplication, QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGroupBox, QFrame
+    QApplication, QWidget, QLabel,
+    QVBoxLayout, QHBoxLayout, QGroupBox,
+    QSizePolicy
 )
 from PyQt6.QtGui import QIcon, QFont
 from PyQt6.QtCore import QTimer
+
 from gpu_info import NvidiaGPU
 from power_setter import PowerSetter
+from graphs.temp_graph import TempCanvas
 
 
 class NvidiaTool(QWidget):
@@ -21,12 +25,12 @@ class NvidiaTool(QWidget):
         self.setup_timer()
 
     def init_ui(self):
-        self.setWindowIcon(QIcon("assets/nvidia.png"))
+        self.setWindowIcon(QIcon(self.get_resource_path("assets/nvidia.png")))
         self.setWindowTitle('nvidia tool')
         self.setGeometry(0, 0, 600, 200)
 
         self.fan_speed_label = QLabel(f"{self.gpu.get_fan_speed_percent()}")
-        self.temp_label = QLabel(f"{self.gpu.get_temp()}")
+        self.temp_label = QLabel(f"{self.gpu.get_temp()} °C")
         self.current_watt_label = QLabel(f"{self.gpu.get_power_draw()}")
         self.current_power_limit_label = QLabel(f"{self.gpu.get_current_power_limit()}")
 
@@ -49,15 +53,15 @@ class NvidiaTool(QWidget):
             title_label = QLabel(title)
             title_label.setFixedWidth(130)
 
+            value.setSizePolicy(
+                QSizePolicy.Policy.Minimum,
+                QSizePolicy.Policy.Preferred)
+
             title_label.setFont(QFont("Arial", 11))
             value.setFont(QFont("Arial", 11))
 
             row_layout.addWidget(title_label)
             row_layout.addWidget(value)
-
-            line = QFrame()
-            line.setFrameShape(QFrame.Shape.VLine)
-            row_layout.addWidget(line)
 
             if indicator:
                 if isinstance(indicator, QIcon):
@@ -75,8 +79,9 @@ class NvidiaTool(QWidget):
         # this is the right layout
         graphs_box = QGroupBox('sensors')
         graphs_layout = QVBoxLayout()
+        self.create_plot()
 
-        graphs_layout.addWidget(QLabel("yoyo"))
+        graphs_layout.addWidget(self.temp_canvas)
         graphs_box.setLayout(graphs_layout)
 
         # the top layout that contains the info and the sensor graphs on the right
@@ -91,18 +96,55 @@ class NvidiaTool(QWidget):
 
         self.setLayout(main_layout)
 
+    def create_plot(self):
+        self.temp_canvas = TempCanvas(self, width=3, height=2, dpi=100)
+
+        self.xdata = list(range(6))
+        self.ydata = [int(self.gpu.get_temp())] * 6
+        self.temp_canvas.axes.set_ylim(30, 100)
+        self.temp_canvas.axes.tick_params(axis='y', labelsize=6)
+        self.temp_canvas.axes.tick_params(axis='x', labelsize=4)
+        self.temp_canvas.axes.set_ylabel("°C", fontsize=5)
+        self.temp_canvas.figure.tight_layout()
+        self.temp_canvas.axes.tick_params(axis='x', bottom=False, labelbottom=False)
+
+        self.temp_canvas.axes.grid(True)
+        self.temp_canvas.axes.grid(True, color='gray', linestyle='--', linewidth=0.5)
+        self.temp_canvas.axes.set_facecolor('#1e1e1e')  # Dark gray or black
+        self.temp_canvas.figure.set_facecolor('#121212')  # Even darker
+        self.temp_canvas.axes.tick_params(axis='both', colors='white')
+
+        self._plot_ref = None
+        self.update_plot()
+        self.plot_timer()
+
+    def update_plot(self):
+        self.ydata = self.ydata[1:] + [int(self.gpu.get_temp())]
+
+        if self._plot_ref is None:
+            self._plot_ref, = self.temp_canvas.axes.plot(self.xdata, self.ydata, 'g')
+        else:
+            self._plot_ref.set_ydata(self.ydata)
+        self.temp_canvas.draw()
+
+    def plot_timer(self):
+        self.pl_timer = QTimer()
+        self.pl_timer.setInterval(1000)
+        self.pl_timer.timeout.connect(self.update_plot)
+        self.pl_timer.start()
+
     def update_power_limit_label(self, value):
         """ gets the value from the gpu module with signal"""
         self.current_power_limit_label.setText(f"{value}")
 
     def update_temp(self, value):
-        self.temp_label.setText(f"{value}")
+        self.temp_label.setText(f"{value} °C")
 
     def update_fan_speed_per(self, value):
-        self.fan_speed_label.setText(f"{value}")
+        self.fan_speed_label.setText(f"{value} %")
 
     def update_current_watt_usage(self, value):
-        self.current_watt_label.setText(f"{value}")
+        self.current_watt_label.setText(f"{value} w")
 
     def refresh_all(self):
         self.update_fan_speed_per(self.gpu.get_fan_speed_percent())
@@ -113,6 +155,12 @@ class NvidiaTool(QWidget):
         self.timer = QTimer()
         self.timer.timeout.connect(self.refresh_all)
         self.timer.start(1000)
+
+    @staticmethod
+    def get_resource_path(relative_path):
+        if hasattr(sys, '_MEIPASS'):
+            return os.path.join(sys._MEIPASS, relative_path)
+        return os.path.join(os.path.abspath("."), relative_path)
 
 
 app = QApplication(sys.argv)
