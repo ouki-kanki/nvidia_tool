@@ -75,7 +75,6 @@ class NvidiaTool(QWidget):
             box_layout.addLayout(row_layout)
 
         info_box.setLayout(box_layout)
-
         # this is the right layout
         graphs_box = QGroupBox('sensors')
         graphs_layout = QVBoxLayout()
@@ -100,7 +99,7 @@ class NvidiaTool(QWidget):
         self.temp_canvas = TempCanvas(self, width=3, height=2, dpi=100)
 
         self.xdata = list(range(6))
-        self.ydata = [int(self.gpu.get_temp())] * 6
+        self.ydata = [self.gpu.get_temp()] * 6
         self.temp_canvas.axes.set_ylim(30, 100)
         self.temp_canvas.axes.tick_params(axis='y', labelsize=6)
         self.temp_canvas.axes.tick_params(axis='x', labelsize=4)
@@ -119,7 +118,7 @@ class NvidiaTool(QWidget):
         self.plot_timer()
 
     def update_plot(self):
-        self.ydata = self.ydata[1:] + [int(self.gpu.get_temp())]
+        self.ydata = self.ydata[1:] + [self.gpu.get_temp()]
 
         if self._plot_ref is None:
             self._plot_ref, = self.temp_canvas.axes.plot(self.xdata, self.ydata, 'g')
@@ -161,6 +160,22 @@ class NvidiaTool(QWidget):
         if hasattr(sys, '_MEIPASS'):
             return os.path.join(sys._MEIPASS, relative_path)
         return os.path.join(os.path.abspath("."), relative_path)
+
+    def closeEvent(self, event):
+        try:
+            if hasattr(self, "timer"):
+                self.timer.stop()
+
+            if hasattr(self, "plot_update_timer"):
+                self.plot_update_timer.stop()
+
+            if hasattr(self.gpu, "shutdown"):
+                self.gpu.shutdown()
+
+        except Exception as e:
+            print(f"cleanup failed: {e}")
+
+        super().closeEvent(event)
 
 
 app = QApplication(sys.argv)
