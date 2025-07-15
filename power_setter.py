@@ -74,6 +74,7 @@ class PowerSetter(QWidget):
     def update_label(self):
         self.label.setText(f"power limit: {self.slider.value()} w")
 
+    # TODO: refactor to use nvml
     def get_max_power_limit(self):
         try:
             result = subprocess.run(
@@ -87,6 +88,7 @@ class PowerSetter(QWidget):
         except subprocess.CalledProcessError:
             return None
 
+    # TODO: refactor to use nvml
     def set_power_limit(self):
         value = self.slider.value()
         try:

@@ -2,15 +2,15 @@ import sys, os
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QLabel,
     QVBoxLayout, QHBoxLayout, QGroupBox,
-    QSizePolicy
+    QSizePolicy, QPushButton
 )
 from PyQt6.QtGui import QIcon, QFont
-from PyQt6.QtCore import QTimer
+from PyQt6.QtCore import QTimer, Qt
 
 from gpu_info import NvidiaGPU
 from power_setter import PowerSetter
 from graphs.temp_graph import TempCanvas
-
+from components.gpu_fan import CpuFan
 
 class NvidiaTool(QWidget):
     def __init__(self):
@@ -21,6 +21,7 @@ class NvidiaTool(QWidget):
 
         # sends the signal with the new value from power_widget module
         self.power_widget.powerLimitSet.connect(self.update_power_limit_label)
+        self.init_fan_percent = self.gpu.get_fan_speed_percent()
         self.init_ui()
         self.setup_timer()
 
@@ -29,16 +30,23 @@ class NvidiaTool(QWidget):
         self.setWindowTitle('nvidia tool')
         self.setGeometry(0, 0, 600, 200)
 
-        self.fan_speed_label = QLabel(f"{self.gpu.get_fan_speed_percent()}")
         self.temp_label = QLabel(f"{self.gpu.get_temp()} °C")
         self.current_watt_label = QLabel(f"{self.gpu.get_power_draw()}")
         self.current_power_limit_label = QLabel(f"{self.gpu.get_current_power_limit()}")
+        self.fan_speed_label = QLabel(f"{self.init_fan_percent}")
+        self.fan_speed_label.setFixedWidth(37)
+        self.cpu_fan_label: CpuFan = CpuFan(self.get_resource_path("assets/gpu_fan.png"))
+
+
 
         label_data = [
-            ("Gpu Name: ", QLabel(f"{self.gpu.get_name()}"), QIcon("assets/nvidia.png")),
-            ("fan speed: ", self.fan_speed_label, QIcon("assets/fan.png")),
+            (
+                "Gpu Name: ", QLabel(f"{self.gpu.get_name()}"),
+                QIcon(self.get_resource_path("assets/nvidia.png"))
+                ),
+            ("fan speed: ", self.fan_speed_label, self.cpu_fan_label),
             ("temp: ", self.temp_label, QIcon("assets/temp.png")),
-            ("watt usage: ", self.current_watt_label, QLabel("watt")),
+            ("watt usage: ", self.current_watt_label, ""),
             ("current power limit: ", self.current_power_limit_label, "")
         ]
 
@@ -47,9 +55,11 @@ class NvidiaTool(QWidget):
         # this is the left layout
         info_box = QGroupBox("Gpu info")
         box_layout = QVBoxLayout()
+        print()
 
         for title, value, indicator in label_data:
             row_layout = QHBoxLayout()
+            row_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
             title_label = QLabel(title)
             title_label.setFixedWidth(130)
 
@@ -74,6 +84,9 @@ class NvidiaTool(QWidget):
 
             box_layout.addLayout(row_layout)
 
+        test_btn = QPushButton("test")
+        test_btn.clicked.connect(self.test)
+        box_layout.addWidget(test_btn)
         info_box.setLayout(box_layout)
         # this is the right layout
         graphs_box = QGroupBox('sensors')
@@ -94,6 +107,9 @@ class NvidiaTool(QWidget):
         main_layout.addWidget(self.power_widget)
 
         self.setLayout(main_layout)
+
+    def test(self):
+        self.cpu_fan_label.set_rotation_speed(90)
 
     def create_plot(self):
         self.temp_canvas = TempCanvas(self, width=3, height=2, dpi=100)
@@ -120,10 +136,16 @@ class NvidiaTool(QWidget):
     def update_plot(self):
         self.ydata = self.ydata[1:] + [self.gpu.get_temp()]
 
+        self.temp_canvas.axes.clear()
+        self.temp_canvas.axes.grid(True, color='gray', linestyle='--', linewidth=0.5)
+
         if self._plot_ref is None:
             self._plot_ref, = self.temp_canvas.axes.plot(self.xdata, self.ydata, 'g')
         else:
             self._plot_ref.set_ydata(self.ydata)
+
+        self.temp_canvas.axes.set_ylim(30, 100)
+        self.temp_canvas.axes.fill_between(self.xdata, self.ydata, color='lime', alpha=0.3)
         self.temp_canvas.draw()
 
     def plot_timer(self):
@@ -140,13 +162,22 @@ class NvidiaTool(QWidget):
         self.temp_label.setText(f"{value} °C")
 
     def update_fan_speed_per(self, value):
+        # print("init - new value", self.init_fan_percent, value)
+        if value != self.init_fan_percent:
+            self.cpu_fan_label.set_rotation_speed(value)
         self.fan_speed_label.setText(f"{value} %")
 
     def update_current_watt_usage(self, value):
         self.current_watt_label.setText(f"{value} w")
 
     def refresh_all(self):
-        self.update_fan_speed_per(self.gpu.get_fan_speed_percent())
+        new_fan_percent = self.gpu.get_fan_speed_percent()
+        self.update_fan_speed_per(new_fan_percent)
+
+        # set the value that is going to be compared with the new value
+        # this is used to prevent the animation to run every second even when the value of the fan remains the same
+        self.init_fan_percent = new_fan_percent
+
         self.update_temp(self.gpu.get_temp())
         self.update_current_watt_usage(self.gpu.get_power_draw())
 
