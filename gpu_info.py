@@ -1,9 +1,11 @@
 from pynvml import *
+#  TODO: change the import, this polutes the global namespace
 
 
 class NvidiaGPU:
     def __init__(self, index=0):
         nvmlInit()
+        # grabs the first gpu in the system
         self.handle = nvmlDeviceGetHandleByIndex(index)
 
     def get_temp(self):
