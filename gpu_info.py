@@ -1,5 +1,18 @@
-from pynvml import *
-#  TODO: change the import, this polutes the global namespace
+from pynvml import (
+    nvmlInit,
+    nvmlDeviceGetHandleByIndex,
+    nvmlDeviceGetTemperature,
+    nvmlDeviceGetTemperatureThreshold,
+    nvmlDeviceGetPowerUsage,
+    nvmlDeviceGetName,
+    nvmlDeviceGetFanSpeed,
+    nvmlDeviceGetPowerManagementLimit,
+    nvmlShutdown,
+    NVMLError,
+    NVML_TEMPERATURE_THRESHOLD_SLOWDOWN,
+    NVML_TEMPERATURE_THRESHOLD_SHUTDOWN,
+    NVML_TEMPERATURE_GPU
+)
 
 
 class NvidiaGPU:
@@ -10,6 +23,16 @@ class NvidiaGPU:
 
     def get_temp(self):
         return nvmlDeviceGetTemperature(self.handle, NVML_TEMPERATURE_GPU)
+
+    def get_temp_threshold_slowdown(self):
+        return nvmlDeviceGetTemperatureThreshold(
+            self.handle,
+            NVML_TEMPERATURE_THRESHOLD_SLOWDOWN)
+
+    def get_temp_threshold_shutdown(self):
+        return nvmlDeviceGetTemperatureThreshold(
+            self.handle,
+            NVML_TEMPERATURE_THRESHOLD_SHUTDOWN)
 
     def get_power_draw(self):
         return nvmlDeviceGetPowerUsage(self.handle) / 1000

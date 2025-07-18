@@ -5,3 +5,6 @@ a simple tool showing fun speed,  power consumption and temp of nvidia cards in 
 
 - can set the power limit on the card
 - temp graph
+
+
+* amd-mode

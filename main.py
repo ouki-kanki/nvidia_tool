@@ -4,13 +4,19 @@ from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QGroupBox,
     QSizePolicy, QPushButton
 )
-from PyQt6.QtGui import QIcon, QFont
-from PyQt6.QtCore import QTimer, Qt
+from PyQt6.QtGui import QIcon, QFont, QColor
+from PyQt6.QtCore import QTimer, Qt, QUrl
+from PyQt6.QtQuickWidgets import QQuickWidget
+from PyQt6_SwitchControl import SwitchControl
+from backend import Backend
 
 from gpu_info import NvidiaGPU
 from power_setter import PowerSetter
 from graphs.temp_graph import TempCanvas
 from components.gpu_fan import CpuFan
+
+
+os.environ["QT_QUICK_CONTROLS_STYLE"] = "org.kde.desktop"
 
 class NvidiaTool(QWidget):
     def __init__(self):
@@ -18,10 +24,13 @@ class NvidiaTool(QWidget):
 
         self.gpu = NvidiaGPU()
         self.power_widget = PowerSetter()
+        self.backend = Backend()
 
-        # sends the signal with the new value from power_widget module
+        self.amd_mode = False
+        self.backend.toggled.connect(self.update_amd_mode)
         self.power_widget.powerLimitSet.connect(self.update_power_limit_label)
         self.init_fan_percent = self.gpu.get_fan_speed_percent()
+
         self.init_ui()
         self.setup_timer()
 
@@ -37,6 +46,24 @@ class NvidiaTool(QWidget):
         self.fan_speed_label.setFixedWidth(37)
         self.cpu_fan_label: CpuFan = CpuFan(self.get_resource_path("assets/gpu_fan.png"))
 
+        # load amd toggle switch
+        qml_amd_switch = QQuickWidget()
+        qml_amd_switch.engine().addImportPath("/usr/lib/qt6/qml")
+
+        qml_amd_switch.engine().rootContext() \
+            .setContextProperty("backend", self.backend)
+        qml_amd_switch.setSource(
+            QUrl.fromLocalFile('qml_components/switch.qml'))
+        qml_amd_switch.setResizeMode(
+            QQuickWidget.ResizeMode.SizeRootObjectToView)
+        qml_amd_switch.setVisible(True)
+        qml_amd_switch.setMinimumSize(120, 30)
+        qml_amd_switch.setClearColor(QColor(0, 0, 0, 0))
+
+        # not working
+        # qml_amd_switch.setAttribute(
+            # Qt.WidgetAttribute.WA_TranslucentBackground)
+        # qml_amd_switch.setWindowFlags(Qt.WindowType.FramelessWindowHint)
 
 
         label_data = [
@@ -55,7 +82,6 @@ class NvidiaTool(QWidget):
         # this is the left layout
         info_box = QGroupBox("Gpu info")
         box_layout = QVBoxLayout()
-        print()
 
         for title, value, indicator in label_data:
             row_layout = QHBoxLayout()
@@ -96,14 +122,18 @@ class NvidiaTool(QWidget):
         graphs_layout.addWidget(self.temp_canvas)
         graphs_box.setLayout(graphs_layout)
 
-        # the top layout that contains the info and the sensor graphs on the right
-
         top_layout = QHBoxLayout()
-        top_layout.addWidget(info_box)
-        top_layout.addWidget(graphs_box)
+        top_layout.addWidget(qml_amd_switch)
+        top_layout.setAlignment(Qt.AlignmentFlag.AlignRight)
+
+        mid_layout = QHBoxLayout()
+        mid_layout.addWidget(info_box)
+        mid_layout.addWidget(graphs_box)
 
         main_layout = QVBoxLayout()
+
         main_layout.addLayout(top_layout)
+        main_layout.addLayout(mid_layout)
         main_layout.addWidget(self.power_widget)
 
         self.setLayout(main_layout)
@@ -134,18 +164,21 @@ class NvidiaTool(QWidget):
         self.plot_timer()
 
     def update_plot(self):
-        self.ydata = self.ydata[1:] + [self.gpu.get_temp()]
+        line_color = 'r' if self.amd_mode else 'g'
+        fill_color = 'red' if self.amd_mode else 'lime'
+        fill_alpha = 0.3 if not self.amd_mode else 0.2
 
+        self.ydata = self.ydata[1:] + [self.gpu.get_temp()]
         self.temp_canvas.axes.clear()
         self.temp_canvas.axes.grid(True, color='gray', linestyle='--', linewidth=0.5)
 
         if self._plot_ref is None:
-            self._plot_ref, = self.temp_canvas.axes.plot(self.xdata, self.ydata, 'g')
+            self._plot_ref, = self.temp_canvas.axes.plot(self.xdata, self.ydata, line_color)
         else:
             self._plot_ref.set_ydata(self.ydata)
 
         self.temp_canvas.axes.set_ylim(30, 100)
-        self.temp_canvas.axes.fill_between(self.xdata, self.ydata, color='lime', alpha=0.3)
+        self.temp_canvas.axes.fill_between(self.xdata, self.ydata, color=fill_color, alpha=fill_alpha)
         self.temp_canvas.draw()
 
     def plot_timer(self):
@@ -153,6 +186,13 @@ class NvidiaTool(QWidget):
         self.pl_timer.setInterval(1000)
         self.pl_timer.timeout.connect(self.update_plot)
         self.pl_timer.start()
+
+    #  ** signals
+    def update_amd_mode(self, checked: bool):
+        self.amd_mode = checked
+
+        # graph updates every sec. if the switch is toggled update the value
+        self.update_plot()
 
     def update_power_limit_label(self, value):
         """ gets the value from the gpu module with signal"""
@@ -192,7 +232,7 @@ class NvidiaTool(QWidget):
             return os.path.join(sys._MEIPASS, relative_path)
         return os.path.join(os.path.abspath("."), relative_path)
 
-    def closeEvent(self, event):
+    def closeEvent(self, event):  # pylint: disable=invalid-name
         try:
             if hasattr(self, "timer"):
                 self.timer.stop()
